@@ -29,7 +29,7 @@ import android.os.Handler;
 import android.os.RemoteException;
 import android.util.Log;
 
-public final class KeyboardHttpServer extends HttpServer {
+public final class KeyboardHttpServer extends KeyboardHttpPoller {
   private HttpService service;
   static final int FOCUS = 1024;
   private int seqNum = 0;
@@ -40,8 +40,7 @@ public final class KeyboardHttpServer extends HttpServer {
     return new KeyboardHttpConnection(this, ch);
   }
 
-  KeyboardHttpServer(HttpService service, ServerSocketChannel ch) {
-    super(ch);
+  KeyboardHttpServer(HttpService service) {
     this.service = service;
   }
   

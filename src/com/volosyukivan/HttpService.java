@@ -45,7 +45,7 @@ public class HttpService extends Service {
   PortUpdateListener portUpdateListener;
   String htmlpage;
   int port;
-  static KeyboardHttpServer server;
+  static Thread pollThread;
   private static boolean isRunning = false;
   private IntentFilter mWifiStateFilter;
   private PhoneStateListener dataListener = new PhoneStateListener() {
@@ -81,15 +81,15 @@ public class HttpService extends Service {
     @Override
     public void startTextEdit(String content) throws RemoteException {
       // FIXME: add args
-      if (server != null)
-        server.notifyClient(content);
+      if (pollThread != null)
+        pollThread.notifyClient(content);
     }
     
     @Override
     public void stopTextEdit() throws RemoteException {
       // FIXME: add args
-      if (server != null)
-        server.notifyClient(null);
+      if (pollThread != null)
+        pollThread.notifyClient(null);
     }
     @Override
     public void setPortUpdateListener(PortUpdateListener listener)
@@ -102,6 +102,8 @@ public class HttpService extends Service {
     }
   };
   
+  /* Displays the notification -- called on Start,
+   * when Wifi changed, when Data connection changed */
   private void updateNotification(boolean ticker) {
     long when = System.currentTimeMillis();
     ArrayList<String> addrs = WiFiKeyboard.getNetworkAddresses();
@@ -137,90 +139,42 @@ public class HttpService extends Service {
     }
   };
   
-  private static ServerSocketChannel makeSocket(Context context) {
-    ServerSocketChannel ch;
-    
-    SharedPreferences prefs = context.getSharedPreferences("port", MODE_PRIVATE);
-    int savedPort = prefs.getInt("port", 7777);
-
-    try {
-      ch = ServerSocketChannel.open();
-      ch.socket().setReuseAddress(true);
-      ch.socket().bind(new java.net.InetSocketAddress(savedPort));
-      return ch;
-    } catch (IOException e) {}
-    
-    if (savedPort != 7777) {
-      try {
-        ch = ServerSocketChannel.open();
-        ch.socket().setReuseAddress(true);
-        ch.socket().bind(new java.net.InetSocketAddress(7777));
-        return ch;
-      } catch (IOException e) {}
-    }
-    
-    for (int i = 1; i < 9; i++) {
-      try {
-        ch = ServerSocketChannel.open();
-        ch.socket().setReuseAddress(true);
-        ch.socket().bind(new java.net.InetSocketAddress(i * 1111));
-        return ch;
-      } catch (IOException e) {}
-    }
-    for (int i = 2; i < 64; i++) {
-      try {
-        ch = ServerSocketChannel.open();
-        ch.socket().setReuseAddress(true);
-        ch.socket().bind(new java.net.InetSocketAddress(i * 1000));
-        return ch;
-      } catch (IOException e) {}
-    }
-    try {
-      ch = ServerSocketChannel.open();
-      ch.socket().setReuseAddress(true);
-      ch.socket().bind(new java.net.InetSocketAddress(7777));
-      return ch;
-    } catch (Throwable t) {
-      throw new RuntimeException(t);
-    }
-  }
-  
   @Override
   public void onCreate() {
-    Log.d("wifikeyboard", "onCreate()");
     super.onCreate();
+    Log.d("wifikeyboard", "onCreate()");
     if (isRunning) return;
     
     registerReceiver(mWifiStateReceiver, mWifiStateFilter);
     TelephonyManager t = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
     t.listen(dataListener, PhoneStateListener.LISTEN_DATA_CONNECTION_STATE);
 
-    InputStream is = getResources().openRawResource(R.raw.key);
-    int pagesize = 32768;
-    byte[] data = new byte[pagesize];
-    StringBuilder page;
-    
-    try {
-      int offset = 0;
-      while (true) {
-        int r = is.read(data, offset, pagesize - offset);
-        if (r < 0) break;
-        offset += r;
-        if (offset >= pagesize) throw new IOException("page is too large to load");
-      }
-      page = new StringBuilder();
-      page.append(new String(data, 0, offset));
-    } catch (IOException e) {
-      throw new RuntimeException("failed to load html page", e);
-    }
-    while (true) {
-      int pos = page.indexOf("$");
-      if (pos == -1) break;
-      int res = Integer.parseInt(page.substring(pos + 1, pos + 9), 16);
-      page.replace(pos, pos + 9, getString(res));
-    }
-    htmlpage = page.toString();
-    startServer(this);
+//    InputStream is = getResources().openRawResource(R.raw.key);
+//    int pagesize = 32768;
+//    byte[] data = new byte[pagesize];
+//    StringBuilder page;
+//    
+//    try {
+//      int offset = 0;
+//      while (true) {
+//        int r = is.read(data, offset, pagesize - offset);
+//        if (r < 0) break;
+//        offset += r;
+//        if (offset >= pagesize) throw new IOException("page is too large to load");
+//      }
+//      page = new StringBuilder();
+//      page.append(new String(data, 0, offset));
+//    } catch (IOException e) {
+//      throw new RuntimeException("failed to load html page", e);
+//    }
+//    while (true) {
+//      int pos = page.indexOf("$");
+//      if (pos == -1) break;
+//      int res = Integer.parseInt(page.substring(pos + 1, pos + 9), 16);
+//      page.replace(pos, pos + 9, getString(res));
+//    }
+//    htmlpage = page.toString();
+    startPolling(this);
   }
   
   private static void removeNotification(Context context) {
@@ -235,7 +189,7 @@ public class HttpService extends Service {
     onServerFinish = null;
 //    stopForeground(true);
     Log.d("wifikeyboard", "onDestroy()");
-    server.finish();
+    pollThread.finish();
     unregisterReceiver(mWifiStateReceiver);
     TelephonyManager tm = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
     tm.listen(dataListener, PhoneStateListener.LISTEN_NONE);
@@ -250,39 +204,58 @@ public class HttpService extends Service {
 
   private static Runnable onServerFinish = null;
   
-  public static void doStartServer(HttpService context) {
-    ServerSocketChannel socket = makeSocket(context);
-    context.port = socket.socket().getLocalPort();
-    server = new KeyboardHttpServer(context, socket);
-    Editor editor = context.getSharedPreferences("port", MODE_PRIVATE).edit();
-    editor.putInt("port", context.port);
-    editor.commit();
-    try {
-      if (context.portUpdateListener != null) {
-        context.portUpdateListener.portUpdated(context.port);
+  public static void doStartPolling(HttpService context) {
+    pollThread = new Thread() {
+      public void run() {
+        int pollDelay = 100;
+        
+        while (Thread.currentThread() == this) {
+          // poll server
+          // send server our events
+          try {
+            Thread.sleep(pollDelay);
+          }
+          catch (InterruptedException ie) {
+            
+          }
+        }
       }
-    } catch (RemoteException e) {
-      Log.e("wifikeyboard", "port update failure", e);
-    }
-    context.updateNotification(true);
-    server.start();
+    };
+    
+    pollThread.start();
+    
+//    ServerSocketChannel socket = makeSocket(context);
+//    context.port = socket.socket().getLocalPort();
+//    server = new KeyboardHttpServer(context, socket);
+//    Editor editor = context.getSharedPreferences("port", MODE_PRIVATE).edit();
+//    editor.putInt("port", context.port);
+//    editor.commit();
+//    try {
+//      if (context.portUpdateListener != null) {
+//        context.portUpdateListener.portUpdated(context.port);
+//      }
+//    } catch (RemoteException e) {
+//      Log.e("wifikeyboard", "port update failure", e);
+//    }
+//    context.updateNotification(true);
+//    server.start();
   }
   
-  public static void startServer(final HttpService context) {
-    if (server == null) {
-      doStartServer(context);
+  public static void startPolling(final HttpService context) {
+    if (pollThread == null) {
+      doStartPolling(context);
     } else {
       onServerFinish = new Runnable() {
         @Override
         public void run() {
-          doStartServer(context);
+          doStartPolling(context);
         }
       };
     }
   }
   
   public void networkServerFinished() {
-    server = null;
+    pollThread = null;
     if (onServerFinish != null) {
       onServerFinish.run();
     }

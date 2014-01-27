@@ -99,7 +99,11 @@ public class WiFiInputMethod extends InputMethodService {
     PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
     wakeLock = pm.newWakeLock(
         PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "wifikeyboard");
-//    Debug.d("WiFiInputMethod started");
+
+    /* TODO: connect to the HTTP service. But HTTP service
+     * should open a connection to the server instead of listening.
+     * */
+    
     serviceConnection = new ServiceConnection() {
       public void onServiceConnected(ComponentName name, IBinder service) {
 //        Debug.d("WiFiInputMethod connected to HttpService.");
