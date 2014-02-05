@@ -44,6 +44,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.volosyukivan.KeyboardHttpServer.KeyboardAction;
+import com.volosyukivan.MessageAck.Result;
 
 import android.content.SharedPreferences;
 import android.os.Handler;
@@ -69,47 +70,6 @@ public class KeyboardHttpPoller extends Thread {
     this.service = service;
   }
   
-  /**
-   * A runnable that can actually return a result,
-   * although the result isn't used so far */
-  abstract class Action {
-    public abstract Object run();
-  }
-  
-  /**
-   * Utility class to run tasks that you can wait on,
-   * and use to collect the result of the task thereafter
-   * */
-  private class ActionRunner implements Runnable {
-    private Action action;
-    private boolean finished; 
-    private Object actionResult;
-    
-    private void setAction(Action action) {
-      this.action = action;
-      this.finished = false;
-    }
-    
-    public void run() {
-      actionResult = action.run();
-      synchronized (this) {
-        finished = true;
-        notify();
-      }
-    }
-    
-    public synchronized Object waitResult() {
-      while (!finished) {
-        try {
-          wait();
-        } catch (InterruptedException e) {
-          actionResult = null;
-          return null;
-        }
-      }
-      return actionResult;
-    }
-  };
   ActionRunner actionRunner = new ActionRunner();
   
   
@@ -207,19 +167,20 @@ public class KeyboardHttpPoller extends Thread {
           Log.e("cloudkeyboard", "Why is there a JSON error here?");
         }
         
-        synchronized(replies) {
-          JSONObject child;
-          JSONArray repl = new JSONArray();
-          
-          while ( (child = replies.poll() ) != null ) {
-            repl.put(child);
-          }
-          try {
-            requestBody.put("replies", repl);
-          }
-          catch (JSONException jse) {
-            Log.e("cloudkeyboard", "Why is there a JSON error here?");
-          }
+        JSONObject child;
+        JSONArray repl = new JSONArray();
+        // TODO: you don't need a queue here
+        // since processEvents() runs in the same thread
+        // instead, manage events such that if an exception
+        // occurs, you can still re-send...
+        while ( (child = replies.poll() ) != null ) {
+          repl.put(child);
+        }
+        try {
+          requestBody.put("replies", repl);
+        }
+        catch (JSONException jse) {
+          Log.e("cloudkeyboard", "Why is there a JSON error here?");
         }
 
         try {
@@ -326,6 +287,9 @@ public class KeyboardHttpPoller extends Thread {
    */
   private int seqNum;
   private void processEvents(JSONArray events) {
+    MessageAck ma;
+    ArrayList<MessageAck> responses = new ArrayList<MessageAck>();
+    
     for (int i=0; i<events.length(); i++) {
       JSONObject event = events.optJSONObject(i);
       String eventType = event.optString("type");
@@ -333,55 +297,160 @@ public class KeyboardHttpPoller extends Thread {
       if (event == null || eventType == null) {
         continue;
       }
-      else if (eventType == "key") {
-        
-        Object result;
-        int seq = event.optInt("seq", -1);
+
+      int seq = event.optInt("seq", -1);
+
+      if (seq == -1)
+        continue;
+
+      if (seq < seqNum) {
+        ma = new MessageAck(seq, Result.MULTIPLE_INPUT);
+        responses.add(ma);
+        continue;
+      }
+      
+      if (eventType == "key") {
+        KeyMessageAck kma = new KeyMessageAck(seq, Result.OK);
         String data = event.optString("data");
         
-        if (seq == -1 || data == null)
-          continue;
-        
-        if (seq < seqNum) {
-          // Multiple clients... ?
-          result = "multi";
+        if (data == null) {
+          kma.res = Result.INVALID_INPUT;
         }
-
-        boolean success;
-        char mode = data.charAt(0);
-        int code = Integer.parseInt(data.substring(1));
-        if (mode == 'C') {
-          // FIXME: can be a problem with extended unicode characters
-          success = success && sendChar(code);
-        } else {
-          boolean pressed = mode == 'D';
-          success = success && sendKey(code, pressed);
-        }
-
-        if (success) {
-          result = "ok";
-        } else {
-          result = "problem";
-        }
-        
-      }
-      else if (eventType == "text") { /* Server requests text from control */
-
-        Object result = runAction(new KeyboardAction() {
-          @Override
-          Object runAction(RemoteKeyListener listener) throws RemoteException {
-            return listener.getText();
+        else {
+          boolean success = true;
+          char mode = data.charAt(0);
+          int code = Integer.parseInt(data.substring(1));
+          if (mode == 'C') {
+            // FIXME: can be a problem with extended unicode characters
+            success = success && sendChar(code);
+          } else {
+            boolean pressed = mode == 'D';
+            success = success && sendKey(code, pressed);
           }
-        });
-        
+  
+          if (success) {
+            kma.res = Result.OK;
+          } else {
+            kma.res = Result.ERROR;
+          }
+        }
+        ma = kma;
       }
-      else if (eventType == "waiting") {
+      else if (eventType == "settext") {
+        SetTextMessageAck stma = new SetTextMessageAck(seq, Result.OK);
+
+        String data = event.optString("data");
         
+        if (data == null) {
+          stma.res = Result.INVALID_INPUT;
+        }
+        else {
+          boolean success = replaceText(data);
+          
+          stma.res = success ? Result.OK : Result.ERROR;
+        }
+        
+        ma = stma;
+      }
+      else if (eventType == "gettext") { /* Server requests text from control */
+        GetTextMessageAck gtma = new GetTextMessageAck(seq, Result.OK, null);
+        
+        gtma.data = sendText();
+        if (gtma.data == null) {
+          gtma.res = Result.ERROR;
+        }
+        
+        ma = gtma;
+      }
+      else {
+        ma = new MessageAck(seq, Result.INVALID_INPUT);
+      }
+      
+      responses.add(ma);
+    }
+    
+    for (int i=0; i<responses.size(); i++) {
+      MessageAck ack = responses.get(i);
+      
+      // For KeyMessageAck, we only acknowledge the last
+      // in a run of KMAs
+      if (ack instanceof KeyMessageAck) {
+        if (i != responses.size() - 1 &&
+            responses.get(i+1) instanceof KeyMessageAck) {
+          continue;
+        }
+      }
+      
+      // Add to reply queue
+      try {
+        replies.add(ack.toJSON());
+      }
+      catch (JSONException jse) {
+        Log.e("cloudkeyboard", "Some replies lost due to exception in creating request.");
       }
     }
   }
+
+  /**
+   * A runnable that can actually return a result,
+   * although the result isn't used so far */
+  abstract class Action {
+    public abstract Object run();
+  }
+  
+  /**
+   * Utility class to run tasks that you can wait on,
+   * and use to collect the result of the task thereafter
+   * */
+  private class ActionRunner implements Runnable {
+    private Action action;
+    private boolean finished; 
+    private Object actionResult;
+    
+    private void setAction(Action action) {
+      this.action = action;
+      this.finished = false;
+    }
+    
+    public void run() {
+      actionResult = action.run();
+      synchronized (this) {
+        finished = true;
+        notify();
+      }
+    }
+    
+    public synchronized Object waitResult() {
+      while (!finished) {
+        try {
+          wait();
+        } catch (InterruptedException e) {
+          actionResult = null;
+          return null;
+        }
+      }
+      return actionResult;
+    }
+  };
+  // used by network thread
+  abstract class KeyboardAction extends Action {
+    @Override
+    public Object run() {
+      try {
+        RemoteKeyListener listener = service.listener;
+        if (listener != null) {
+          return runAction(listener);
+        }
+      } catch (RemoteException e) {
+        Debug.e("Exception on input method side, ignore", e);
+      }
+      return null;
+    }
+    abstract Object runAction(RemoteKeyListener listener) throws RemoteException;
+  };
   
   // executed by network thread
+  // We want it to block until the main thread replies
   boolean sendKey(final int code0, final boolean pressed) {
     final int code = convertKey(code0);
 //    Log.d("wifikeyboard", "in: " + code0 + " out:" + code);
@@ -406,5 +475,26 @@ public class KeyboardHttpPoller extends Thread {
       }
     });
     return success != null;
+  }
+  
+  String sendText() {
+    Object result = runAction(new KeyboardAction() {
+      @Override
+      Object runAction(RemoteKeyListener listener) throws RemoteException {
+        return listener.getText();
+      }
+    });
+    return (String)result;
+  }
+
+  public boolean replaceText(final String string) {
+    Object result = runAction(new KeyboardAction() {
+      @Override
+      Object runAction(RemoteKeyListener listener) throws RemoteException {
+        
+        return listener.setText(string) ? service : null;
+      }
+    });
+    return result != null;
   }
 }
