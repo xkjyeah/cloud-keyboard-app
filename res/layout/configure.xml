@@ -37,7 +37,7 @@
     android:layout_margin="5dip"
     >
       <Button
-        android:id="@+id/ok"
+        android:id="@+id/saveSettings"
         android:text="Ok"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

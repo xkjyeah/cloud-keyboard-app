@@ -18,7 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  -->
 <resources>
-<string name="app_name">WiFiKeyboard</string>
+<string name="app_name">CloudKeyboard</string>
 
 <string name="desc_setup_wifi">Setting up WiFiKeyboard:</string>
 <string name="desc_goto_settings">Go to Settings->Language &amp; Keyboard</string>
@@ -67,7 +67,7 @@ To enable !WiFiKeyboard on your device:
 <string name="keyboard_mode_text">International keyboard</string>
 <string name="keyboard_mode_keycodes">Game mode (key codes only)</string>
 <string name="keyboard_connection_status_title">Status:</string>
-<string name="keyboard_connection_status_initial_value">Connecting...</string>
+<string name="keyboard_connection_status_initial_value">Connecting…</string>
 <string name="special_keys_title">Special keys:</string>
 <string name="special_key_shift_mapping">Shift = Shift</string>
 <string name="special_key_alt_mapping">Alt = Alt</string>
@@ -78,4 +78,11 @@ To enable !WiFiKeyboard on your device:
 <string name="special_key_volume_mapping">F9, F10 = Volume control</string>
 <string name="footer_source_code">Source code available (license GPL v2).</string>
 <string name="footer_author">Created by Ivan Volosyuk on 2010.</string>
+<string name="desc_prompt_1">CloudKeyboard server:</string>
+<string name="desc_prompt_2">Visit the server web site and enter the following shared key to begin using CloudKeyboard:</string>
+<string name="reset">Reset</string>
+<string name="save">Save</string>
+<string name="notification_shared_key">The shared-key for Cloud Keyboard is %1$s. Log in at %2$s to start typing</string>
+<string name="desc_prompt_3">Renewing the key will cause any currently connected clients to be disconnected.</string>
+<string name="desc_renew_key">Renew Key</string>
 </resources>

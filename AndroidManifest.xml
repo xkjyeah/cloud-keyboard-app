@@ -18,8 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-      package="com.volosyukivan"
-      android:versionName="2.3.5" android:versionCode="30">
+      package="com.simd"
+      android:versionName="1.0.0" android:versionCode="30">
     <uses-sdk android:minSdkVersion="3" android:targetSdkVersion="17"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -35,7 +35,7 @@
     
     <application android:icon="@drawable/icon"
                  android:label="@string/app_name">
-        <activity android:name=".WiFiKeyboard"
+        <activity android:name="CloudKeyboard"
                   android:label="@string/app_name"
                   android:clearTaskOnLaunch="true"
                   android:noHistory="true">
@@ -44,14 +44,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".WidgetActivity"
+        <activity android:name="WidgetActivity"
                   android:label="@string/app_name"
                   android:theme="@android:style/Theme.NoDisplay"
                   android:excludeFromRecents="true"
                   android:noHistory="true">
                 <action android:name="android.intent.action.MAIN" />
         </activity>
-        <activity android:name=".WidgetConfigure"
+        <activity android:name="WidgetConfigure"
                   android:theme="@android:style/Theme.Dialog"
                   android:label="Widget configuration">
           <intent-filter>
@@ -60,17 +60,17 @@
         </activity>
         
         <!-- Declares the input method service -->
-        <service android:name="WiFiInputMethod"
-            android:label="WiFiKeyboard"
+        <service android:name="CloudKBInputMethod"
+            android:label="Cloud Keyboard"
             android:permission="android.permission.BIND_INPUT_METHOD">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />
             </intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method" />
         </service>
-        <service android:name="HttpService"/>
+        <service android:name="HttpService" android:label="Cloud Keyboard HTTP Service"/>
         
-        <receiver android:name=".WidgetProvider" android:label="WiFiKeyboard">
+        <receiver android:name="WidgetProvider" android:label="Cloud Keyboard Provider">
           <intent-filter>
 	    <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
           </intent-filter>
