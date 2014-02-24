@@ -85,4 +85,7 @@ To enable !WiFiKeyboard on your device:
 <string name="notification_shared_key">The shared-key for Cloud Keyboard is %1$s. Log in at %2$s to start typing</string>
 <string name="desc_prompt_3">Renewing the key will cause any currently connected clients to be disconnected.</string>
 <string name="desc_renew_key">Renew Key</string>
+<string name="max_poll_interval">Maximum poll interval:</string>
+<string name="test_area">Test CloudKeyboard here:</string>
+<string name="max_poll_interval_help">When inactive, the time interval at which Cloud Keyboard should check for new keystrokes</string>
 </resources>

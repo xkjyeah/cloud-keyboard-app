@@ -133,12 +133,18 @@ public class HttpService extends Service {
     
     @Override
     public void logout() {
+      wantLogout = true;
       if (HttpService.pollThread != null)
         HttpService.pollThread.finish();
     }
     
     public void resetPoll() {
       pollThread.resetPoll();
+    }
+    
+    @Override
+    public float getPollInterval() throws RemoteException {
+      return HttpService.this.getPollInterval();
     }
   };
   
@@ -163,12 +169,18 @@ public class HttpService extends Service {
     mgr.notify(0, n);
   }
   
+  protected float getPollInterval() {
+    return getSharedPreferences("default", Context.MODE_PRIVATE)
+        .getFloat("pollInterval", 10);
+  }
+
   private final BroadcastReceiver mWifiStateReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context context, Intent intent) {
       updateNotification();
     }
   };
+  public boolean wantLogout = false;
   
   @Override
   public void onCreate() {

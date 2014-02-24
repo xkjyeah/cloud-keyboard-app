@@ -35,6 +35,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -44,7 +45,7 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
     ServiceConnection serviceConnection;
     SharedKeyUpdateListener updateListener;
     
-    private TextView txtSharedKey, txtServerURL;
+    private TextView txtSharedKey, txtServerURL, txtPollInterval;
     private TextView lblPrompt;
     private Button btnSaveSettings, btnCancelSettings, btnRenewKey;
     
@@ -118,6 +119,7 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
     private void bindViews() {
       txtSharedKey = (TextView) findViewById(R.id.sharedKey);
       txtServerURL = (TextView) findViewById(R.id.serverURL);
+      txtPollInterval = (EditText) findViewById(R.id.pollInterval);
       lblPrompt = (TextView) findViewById(R.id.prompt);
       btnSaveSettings = (Button) findViewById(R.id.saveSettings);
       btnCancelSettings = (Button) findViewById(R.id.cancelSettings);
@@ -130,8 +132,10 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
     
     private void updateViews() {
       String loginURL = "???", sharedKey = "???";
+      float pollInterval = -1;
       
       try {
+        pollInterval = serviceBind.getPollInterval();
         loginURL = serviceBind.getLoginURL();
         sharedKey = serviceBind.getSharedKey();
       }
@@ -141,6 +145,7 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
       
       txtServerURL.setText(loginURL);
       txtSharedKey.setText( (sharedKey != null) ? sharedKey : "(Not logged in)");
+      txtPollInterval.setText(Float.toString(pollInterval));
     }
 
     @Override
@@ -179,21 +184,32 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
       try {
         loginURL = serviceBind.getLoginURL();
       }catch(RemoteException e){}
-      if (arg0 == btnSaveSettings &&
-          loginURL != null &&
-          txtServerURL.getText() != loginURL
-          ) {
-        // Save the new settings
+      if (arg0 == btnSaveSettings) {
+        boolean needRefresh = loginURL != null &&
+            !loginURL.equals(txtServerURL.getText().toString());
+        
         SharedPreferences.Editor ed = getSharedPreferences("default", Context.MODE_PRIVATE)
           .edit();
-        ed.putString("serverURL", txtServerURL.getText().toString());
         
+        // Save the new settings
+        ed.putString("serverURL", txtServerURL.getText().toString());
+        try {
+          ed.putFloat("pollInterval", Float.parseFloat(txtPollInterval.getText().toString()) );
+        } catch (NumberFormatException nfe) {
+          ed.putFloat("pollInterval", 10);
+        }
+          
         if (ed.commit()) {
           /* Check if the server has changed...
            * if it has not, do nothing */
           try {
-            serviceBind.logout();
-            serviceBind.login();
+            if (needRefresh) {
+              serviceBind.logout();
+              serviceBind.login();
+            }
+            else {
+              serviceBind.resetPoll();
+            }
           }
           catch (RemoteException e) {
           }
@@ -202,6 +218,7 @@ public class CloudKeyboard extends Activity implements android.view.View.OnClick
           /* FIXME: Some dialog telling user the save failed */
         }
         updateViews();
+        
         return;
       }
       

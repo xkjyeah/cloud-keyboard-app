@@ -240,10 +240,17 @@ public class KeyboardHttpPoller extends Thread {
           base_url.getPort(), "/").toURI();
         
         for (HttpCookie cookie : cookies) {
+          cookie.setPath("/"); // FIXME: save and read this setting
+          cookie.setDomain(u.getHost());
           cookieManager.getCookieStore().add(u, cookie);
+          Log.d("cloudkb", "Loaded: " + cookie.toString());
+          Log.d("cloudkb", Long.toString(cookie.getMaxAge()));
+          Log.d("cloudkb", (cookie.getDomain() == null) ? "(null)" : cookie.getDomain());
+          Log.d("cloudkb", (cookie.getPortlist() == null) ? "(null)" : cookie.getPortlist());
         }
       }
       catch (URISyntaxException e) {
+        e.printStackTrace();
       } catch (MalformedURLException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -258,27 +265,21 @@ public class KeyboardHttpPoller extends Thread {
   private void doPoll(URL u) throws IOException {
     ArrayList<JSONObject> replies = new ArrayList<JSONObject>();
     // now, regularly poll the destination server
-    final int MAX_POLL_INTERVAL = 1 << 14; // ~16 seconds
     
     pollInterval = 1;
     
     while (true) {
       HttpURLConnection cl = (HttpURLConnection) new URL(u, "poll").openConnection();
-      
       cl.setRequestMethod("POST");
       cl.setDoOutput(true);
+      cl.addRequestProperty("Content-type", "application/json");
       OutputStream os = cl.getOutputStream();
       
       JSONObject requestBody = new JSONObject();
-      
-//        try {
-//          requestBody.put("action", "poll");
-//        }
-//        catch (JSONException jse) {
-//          Log.e("cloudkeyboard", "Why is there a JSON error here?");
-//        }
-      
       JSONArray repl = new JSONArray();
+      JSONObject replyBody = null;
+      JSONArray events = null;
+      
       // TODO: you don't need a queue here
       // since processEvents() runs in the same thread
       // instead, manage events such that if an exception
@@ -288,45 +289,48 @@ public class KeyboardHttpPoller extends Thread {
       }
       try {
         OutputStreamWriter osw = new OutputStreamWriter(os, "UTF-8");
+        
         requestBody.put("replies", repl);
 
         osw.write(requestBody.toString(2));
+        osw.close();
         
         int responseCode = cl.getResponseCode();
-        
+       
         if (responseCode != 200) {
-          Log.e("cloudkeyboard", "Failed to get a favourable response.");
-          continue;
+          Log.e("cloudkeyboard", "poll returned response " + responseCode);
         }
-        
+        else {
+          // Otherwise, the poll is a success. We can discard the replies
+          // and process the new events.
+          replies.clear(); // Oh well, no error-handling/retries for now
+          
+          // Now read the JSON reply... if it is a JSON reply
+          replyBody = jsonFromInputStream(cl.getInputStream());
+        }
       }
       catch (JSONException jse) {
+        // the replies are giving us problems. so...
+        replies.clear();
         Log.e("cloudkeyboard", "Why is there a JSON error here?" + jse.toString());
       }
       catch (UnsupportedEncodingException uee) {
         Log.e("cloudkeyboard", uee.toString());
       }
       catch (IOException ioe) {
-        break;
+        pollInterval = Math.min(pollInterval, 1024);
       }
-      
-      replies.clear(); // Oh well, no error-handling/retries for now
-      
-      // Now read the JSON reply... if it is a JSON reply
-      JSONObject replyBody = jsonFromInputStream(cl.getInputStream());
-      
-      JSONArray events;
-      
+
       if (replyBody != null &&
           replyBody.has("events") &&
           (events = replyBody.optJSONArray("events")) != null &&
           events.length() != 0) {
         pollInterval = 1;
         
-        replies = processEvents(events);
+        replies.addAll(processEvents(events));
       }
       else {
-        if (pollInterval*2 < MAX_POLL_INTERVAL) {
+        if (pollInterval*2 < service.getPollInterval() * 1000) {
           pollInterval *= 2;
         }
       }
@@ -377,9 +381,14 @@ public class KeyboardHttpPoller extends Thread {
       URL url = new URL(
             new URL(service.getLoginURL()), "devices/");
       cm = doSessionCookie(url);
-
+      
       // login
-      String sharedKey = doLogin(url);
+      String sharedKey = null;
+      try {
+        sharedKey = doLogin(url);
+      } catch (IOException ioe) {
+        service.notifySharedKey(ioe.getMessage());
+      }
       if (sharedKey == null) return;
       
       // update UI
@@ -388,8 +397,10 @@ public class KeyboardHttpPoller extends Thread {
       // poll
       doPoll(url);
       
-      // logout
-      doLogout(url);
+      if (service.wantLogout) {
+        // logout
+        doLogout(url);
+      }
        
       onExit(url, cm);
       
@@ -427,6 +438,14 @@ public class KeyboardHttpPoller extends Thread {
         storageString = null;
       else 
         storageString = TextUtils.join(",", cookies);
+      
+      for (HttpCookie cookie: cookies) {
+        Log.d("cloudkb", "Saved: " + cookie.toString());
+        Log.d("cloudkb", Long.toString(cookie.getMaxAge()));
+        Log.d("cloudkb", (cookie.getPath() == null) ? "(null)" : cookie.getPath());
+        Log.d("cloudkb", (cookie.getDomain() == null) ? "(null)" : cookie.getDomain());
+        Log.d("cloudkb", (cookie.getPortlist() == null) ? "(null)" : cookie.getPortlist());
+      }
       
       SharedPreferences.Editor ed = service.getSharedPreferences("default", Context.MODE_PRIVATE)
         .edit();
@@ -470,20 +489,10 @@ public class KeyboardHttpPoller extends Thread {
       }
 
 	  // ignore sequence number for now
-	  int seq = 0;
-/*      int seq = event.optInt("seq", -1);
-
-      if (seq == -1)
-        continue;
-
-      if (seq < seqNum) {
-        ma = new MessageAck(seq, Result.MULTIPLE_INPUT);
-        responses.add(ma);
-        continue;
-      }*/
+	  int seq = event.optInt("seq", -1);
       
       if (eventType.equals("key")) {
-        KeyMessageAck kma = new KeyMessageAck(Result.OK);
+        KeyMessageAck kma = new KeyMessageAck(seq, Result.OK);
         String data = event.optString("data");
         
         if (data == null) {
@@ -510,7 +519,7 @@ public class KeyboardHttpPoller extends Thread {
         ma = kma;
       }
       else if (eventType.equals("settext")) {
-        SetTextMessageAck stma = new SetTextMessageAck(Result.OK);
+        SetTextMessageAck stma = new SetTextMessageAck(seq, Result.OK);
 
         String data = event.optString("data");
         
@@ -526,7 +535,7 @@ public class KeyboardHttpPoller extends Thread {
         ma = stma;
       }
       else if (eventType.equals("gettext")) { /* Server requests text from control */
-        GetTextMessageAck gtma = new GetTextMessageAck(Result.OK, null);
+        GetTextMessageAck gtma = new GetTextMessageAck(seq, Result.OK, null);
         
         gtma.data = sendText();
         if (gtma.data == null) {
@@ -542,17 +551,9 @@ public class KeyboardHttpPoller extends Thread {
       responses.add(ma);
     }
     
-    for (int i=0; i<responses.size(); i++) {
-      MessageAck ack = responses.get(i);
-      
-      // For KeyMessageAck, we only acknowledge the last
-      // in a run of KMAs
-      if (ack instanceof KeyMessageAck) {
-        if (i != responses.size() - 1 &&
-            responses.get(i+1) instanceof KeyMessageAck) {
-          continue;
-        }
-      }
+    for (MessageAck ack : responses) {
+      if (ack.seq == -1)
+        continue;
       
       // Add to reply queue
       try {

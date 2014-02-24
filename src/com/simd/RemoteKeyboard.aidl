@@ -32,6 +32,7 @@ interface RemoteKeyboard {
     
     String getSharedKey();
     String getLoginURL();
+    float getPollInterval();
     void logout();
     void login();
     void resetPoll();
