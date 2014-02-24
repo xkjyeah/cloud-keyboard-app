@@ -90,7 +90,7 @@ public class CloudKBInputMethod extends InputMethodService {
     super.onCreate();
     PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
     wakeLock = pm.newWakeLock(
-        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "wifikeyboard");
+        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "cloudkb");
 
     /* TODO: connect to the HTTP service. But HTTP service
      * should open a connection to the server instead of listening.
@@ -269,7 +269,7 @@ public class CloudKBInputMethod extends InputMethodService {
     if (code == KeyEvent.KEYCODE_ENTER) {
       if (shouldSend()) {
         if (!down) return;
-        Log.d("ivan", "sending submit action");
+        Log.d("cloudkb", "sending submit action");
         conn.performEditorAction(EditorInfo.IME_ACTION_SEND);
         return;
       }
@@ -308,32 +308,32 @@ public class CloudKBInputMethod extends InputMethodService {
 
   private boolean shouldSend() {
     if (pressedKeys.contains(KEY_CONTROL)) {
-//      Log.d("ivan", "Control pressed");
+//      Log.d("cloudkb", "Control pressed");
       return true;
     }
     EditorInfo editorInfo = getCurrentInputEditorInfo();
     if (editorInfo == null) {
-//      Log.d("ivan", "No editor info");
+//      Log.d("cloudkb", "No editor info");
       return false;
     }
 
     if ((editorInfo.inputType & InputType.TYPE_CLASS_TEXT) == 0) {
-//      Log.d("ivan", "Not text, sending enter");
+//      Log.d("cloudkb", "Not text, sending enter");
       return false;
     }
 
 
     if ((editorInfo.inputType & InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0) {
-//      Log.d("ivan", "Multi-line, sending ordinary enter");
+//      Log.d("cloudkb", "Multi-line, sending ordinary enter");
       return false;
     }
 
     int action = editorInfo.imeOptions & EditorInfo.IME_MASK_ACTION;
     if (action == EditorInfo.IME_ACTION_NONE || action == EditorInfo.IME_ACTION_DONE) {
-//      Log.d("ivan", "No useful action, sending enter");
+//      Log.d("cloudkb", "No useful action, sending enter");
       return false;
     }
-//    Log.d("ivan", "Useful action to be performed");
+//    Log.d("cloudkb", "Useful action to be performed");
     return true;
   }
 
@@ -433,7 +433,7 @@ public class CloudKBInputMethod extends InputMethodService {
       if (Character.isWhitespace(str.charAt(end))) break;
     }
     int start = shift ? text.selectionStart : end;
-    Log.d("wifikeyboard", "start = " + start + " end = " + end);
+    Log.d("cloudkb", "start = " + start + " end = " + end);
     conn.setSelection(start, end);
   }
 
@@ -454,7 +454,7 @@ public class CloudKBInputMethod extends InputMethodService {
     }
     end++;
     int start = shift ? text.selectionStart : end;
-    Log.d("wifikeyboard", "start = " + start + " end = " + end);
+    Log.d("cloudkb", "start = " + start + " end = " + end);
     conn.setSelection(start, end);
   }
 
@@ -471,7 +471,7 @@ public class CloudKBInputMethod extends InputMethodService {
       if (end == -1) end = text.text.length();
     }
     int start = shift ? text.selectionStart : end;
-    Log.d("wifikeyboard", "start = " + start + " end = " + end);
+    Log.d("cloudkb", "start = " + start + " end = " + end);
     conn.setSelection(start, end);
   }
 
@@ -489,7 +489,7 @@ public class CloudKBInputMethod extends InputMethodService {
       end++;
     }
     int start = shift ? text.selectionStart : end;
-    Log.d("wifikeyboard", "start = " + start + " end = " + end);
+    Log.d("cloudkb", "start = " + start + " end = " + end);
    conn.setSelection(start, end);
   }
 

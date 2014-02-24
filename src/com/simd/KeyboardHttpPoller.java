@@ -133,12 +133,12 @@ public class KeyboardHttpPoller extends Thread {
       replyBody = new JSONObject(sb.toString());
     }
     catch (JSONException jse) {
-      Log.e("cloudkeyboard", "Could not parse reply from server as JSON: " + jse.toString());
+      Log.e("cloudkb", "Could not parse reply from server as JSON: " + jse.toString());
       // return a blank object...
       replyBody = new JSONObject();
     }
     catch (IOException ioe) {
-      Log.e("cloudkeyboard", "I/O error while reading reply from server: " + ioe.toString());
+      Log.e("cloudkb", "I/O error while reading reply from server: " + ioe.toString());
       replyBody = new JSONObject();
     }
     return replyBody;
@@ -298,7 +298,7 @@ public class KeyboardHttpPoller extends Thread {
         int responseCode = cl.getResponseCode();
        
         if (responseCode != 200) {
-          Log.e("cloudkeyboard", "poll returned response " + responseCode);
+          Log.e("cloudkb", "poll returned response " + responseCode);
         }
         else {
           // Otherwise, the poll is a success. We can discard the replies
@@ -312,10 +312,10 @@ public class KeyboardHttpPoller extends Thread {
       catch (JSONException jse) {
         // the replies are giving us problems. so...
         replies.clear();
-        Log.e("cloudkeyboard", "Why is there a JSON error here?" + jse.toString());
+        Log.e("cloudkb", "Why is there a JSON error here?" + jse.toString());
       }
       catch (UnsupportedEncodingException uee) {
-        Log.e("cloudkeyboard", uee.toString());
+        Log.e("cloudkb", uee.toString());
       }
       catch (IOException ioe) {
         pollInterval = Math.min(pollInterval, 1024);
@@ -560,7 +560,7 @@ public class KeyboardHttpPoller extends Thread {
         replies.add(ack.toJSON());
       }
       catch (JSONException jse) {
-        Log.e("cloudkeyboard", "Some replies lost due to exception in creating request.");
+        Log.e("cloudkb", "Some replies lost due to exception in creating request.");
       }
     }
     return replies;

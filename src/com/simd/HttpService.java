@@ -185,7 +185,7 @@ public class HttpService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
-    Log.d("wifikeyboard", "onCreate()");
+    Log.d("cloudkb", "onCreate()");
     if (isRunning) return;
     
     registerReceiver(mWifiStateReceiver, mWifiStateFilter);
@@ -208,7 +208,7 @@ public class HttpService extends Service {
     isRunning = false;
     onServerFinish = null;
 //    stopForeground(true);
-    Log.d("wifikeyboard", "onDestroy()");
+    Log.d("cloudkb", "onDestroy()");
     pollThread.finish();
     unregisterReceiver(mWifiStateReceiver);
     TelephonyManager tm = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
@@ -240,7 +240,7 @@ public class HttpService extends Service {
 //        context.portUpdateListener.portUpdated(context.port);
 //      }
 //    } catch (RemoteException e) {
-//      Log.e("wifikeyboard", "port update failure", e);
+//      Log.e("cloudkb", "port update failure", e);
 //    }
 //    context.updateNotification(true);
 //    server.start();
